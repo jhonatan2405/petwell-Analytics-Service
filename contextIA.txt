@@ -1,0 +1,123 @@
+# Analytics Service — PetWell
+# ═══════════════════════════════════════════════════════════════════════════════
+
+## 1. Descripción
+
+Microservicio de analítica y dashboards para la plataforma PetWell.
+NO modifica datos ni interfiere con la lógica de negocio de otros servicios.
+Su única responsabilidad es LEER, AGREGAR y CALCULAR KPIs.
+
+Puerto: 3008
+Gateway base URL: /api/v1/analytics
+
+## 2. Arquitectura
+
+analytics-service/
+├── src/
+│   ├── config/
+│   │   └── env.ts                  # Variables de entorno tipadas
+│   ├── controllers/
+│   │   └── analytics.controller.ts # Manejo de requests HTTP
+│   ├── services/
+│   │   └── analytics.service.ts    # Lógica de cálculo de KPIs
+│   ├── repositories/
+│   │   └── analytics.repository.ts # Fetching de datos de otros microservicios
+│   ├── routes/
+│   │   └── analytics.routes.ts     # Registro de rutas + guards de rol
+│   ├── middlewares/
+│   │   └── auth.middleware.ts      # Autenticación JWT + autorización por rol
+│   ├── utils/
+│   │   ├── jwt.util.ts             # Verificación de tokens
+│   │   └── response.util.ts        # Respuestas estándar success/error
+│   └── server.ts                   # Entry point Express
+
+## 3. Endpoints
+
+GET /health
+  → { status: "ok", service: "analytics-service" }
+
+GET /api/v1/analytics/global
+  → Acceso: PETWELL_ADMIN
+  → Calcula métricas de toda la plataforma.
+  → Consume: Appointment, User, Pet, Billing
+
+GET /api/v1/analytics/clinic/:clinicId
+  → Acceso: PETWELL_ADMIN | CLINIC_ADMIN (solo su clínica)
+  → Dashboard por clínica con estados, tipos y ocupación.
+
+GET /api/v1/analytics/clinic/:clinicId/revenue
+  → Acceso: PETWELL_ADMIN | CLINIC_ADMIN (solo su clínica)
+  → Analítica financiera: facturado, pagado, tasa de pago.
+
+## 4. KPIs calculados
+
+Dashboard Global:
+  - total_clinics
+  - total_pets
+  - total_appointments
+  - total_revenue (suma de facturas PAID)
+  - appointments_by_status (objeto clave→conteo)
+  - appointments_by_type  (objeto clave→conteo)
+  - telemed_usage_rate (%)
+
+Dashboard por Clínica:
+  - total_appointments
+  - completed | confirmed | cancelled | no_show | pending
+  - revenue_total | revenue_paid
+  - appointments_by_type
+  - occupancy_rate = (confirmed + completed) / total × 100
+  - telemed_usage_rate (%)
+
+Revenue por Clínica:
+  - total_facturado
+  - total_pagado
+  - tasa_de_pago (%)
+  - invoices_by_status (objeto clave→conteo)
+
+## 5. Seguridad
+
+JWT payload esperado: { sub, email, role, clinic_id }
+
+Reglas:
+  PETWELL_ADMIN → acceso total a todos los endpoints
+  CLINIC_ADMIN  → solo puede ver datos de SU clinic_id
+  Otros roles   → 403 Forbidden
+
+Tokens se leen de: Authorization: Bearer <token>
+Comunicación inter-servicio: x-internal-service-key
+
+## 6. Integraciones
+
+→ Appointment Service (3005): GET /api/v1/appointments
+→ User Service       (3003): GET /api/v1/clinics
+→ Pet Service        (3002): GET /api/v1/pets
+→ Billing Service    (3009): GET /api/v1/billing/invoices
+
+Todos los fetches son tolerantes a fallos:
+  - Si un servicio cae → se loggea el error y se continúa con datos vacíos
+  - Timeout: 5000ms por llamada
+  - Todas las llamadas se hacen en paralelo con Promise.all()
+
+## 7. Variables de entorno
+
+PORT=3008
+NODE_ENV=development
+JWT_SECRET=<mismo que los demás servicios>
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+APPOINTMENT_SERVICE_URL=http://localhost:3005
+USER_SERVICE_URL=http://localhost:3003
+PET_SERVICE_URL=http://localhost:3002
+BILLING_SERVICE_URL=http://localhost:3009
+INTERNAL_SERVICE_KEY=<clave interna compartida>
+
+## 8. Changelog
+
+v1.0.0 — 2026-04-16
+  + Creación desde cero del Analytics Service
+  + Dashboard global para PETWELL_ADMIN
+  + Dashboard por clínica con ocupación y telemedicina
+  + Analítica de revenue (facturado vs pagado)
+  + Integración con Appointment, User, Pet y Billing services
+  + Manejo tolerante a fallos en cada llamada inter-servicio
+  + Guards de rol: requirePetwellAdmin, requireClinicAccess
+  + Registro de ruta /api/v1/analytics en el API Gateway
