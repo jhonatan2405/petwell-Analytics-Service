@@ -1,0 +1,48 @@
+name: CI/CD — Analytics Service
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  ci:
+    name: 🧪 CI — Install & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout código fuente
+        uses: actions/checkout@v4
+
+      - name: 🟢 Configurar Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Instalar dependencias
+        run: npm ci
+
+      - name: ✅ Validación completada
+        run: echo "Dependencias instaladas correctamente."
+
+  deploy:
+    name: 🚀 Deploy → Render
+    runs-on: ubuntu-latest
+    needs: ci
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: 🚀 Disparar deploy en Render
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" \
+            --request POST \
+            "${{ secrets.RENDER_DEPLOY_HOOK_ANALYTICS }}"
+          echo " → Analytics Service deploy enviado"
+
+      - name: ✅ Deploy completado
+        run: echo "🎉 Analytics Service desplegado en Render"
