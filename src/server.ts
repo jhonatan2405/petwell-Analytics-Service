@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import promBundle from 'express-prom-bundle';
 import { env } from './config/env';
 import analyticsRoutes from './routes/analytics.routes';
 
@@ -17,6 +18,16 @@ app.use(cors({
 }));
 app.use(morgan('dev'));
 app.use(express.json());
+
+// ─── Prometheus Metrics ───────────────────────────────────────────────────────
+const metricsMiddleware = promBundle({
+  includeMethod: true,
+  includePath: true,
+  includeStatusCode: true,
+  includeUp: true,
+  promClient: { collectDefaultMetrics: {} },
+});
+app.use(metricsMiddleware);
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
